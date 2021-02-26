@@ -1,15 +1,103 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title><%= title %></title>
-    <link rel='stylesheet' href='/stylesheets/style.css' />
-  </head>
-  <body>
-    <h1>Hey! This is a functioning prototype for our final project!</h1>
-    <canvas id="canvas" height="500px" width="500px"></canvas>
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      var socket = io();
-    </script>
-  </body>
+
+<head>
+  <title>
+    The damn drawing page
+  </title>
+  <link rel='stylesheet' href='/stylesheets/style.css' />
+</head>
+
+<body>
+  <h1>Boardspace Prototype</h1>
+  <canvas id="canvas" height="500px" width="500px"></canvas>
+</body>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var socket = io();
+    let nextId = 0;
+    let mouseX = 0;
+    let mouseY = 0;
+    const POLLRATE = 5;
+    let poller = 0;
+    let lines = [];
+    let tempLine = [];
+    let mouseDown = false;
+    let canvas = document.getElementById("canvas");
+    let context = canvas.getContext('2d');
+    function animate(timething) {
+      context.clearRect(0,0,canvas.width,canvas.height);
+
+      lines.forEach((line) => {
+        context.beginPath();
+        if (line.length > 0) {
+          context.moveTo(line[0].x, line[0].y);
+        }
+        for (let i = 1; i < line.length; i++) {
+          context.lineTo(line[i].x, line[i].y);
+        }
+        context.stroke();
+      });
+
+      if (tempLine.length > 0) {
+        context.beginPath();
+        context.moveTo(tempLine[0].x, tempLine[0].y);
+        for (let i = 1; i < tempLine.length; i++) {
+          context.lineTo(tempLine[i].x, tempLine[i].y);
+        }
+        context.stroke();
+      }
+
+      poller = (poller + 1) % POLLRATE;
+      if (mouseDown && poller == 0) {
+        tempLine.push({ x: mouseX, y: mouseY });
+      }
+      window.requestAnimationFrame(animate);
+    }
+
+    canvas.onmousemove = function (event) {
+      let rect = canvas.getBoundingClientRect(); 
+      mouseX = event.clientX - rect.left; 
+      mouseY = event.clientY - rect.top; 
+    }
+
+    canvas.onmousedown = function (event) {
+      mouseDown = true;
+      tempLine.push({ x: mouseX, y: mouseY });
+    }
+
+    canvas.onmouseup = function (event) {
+      mouseDown = false;
+      tempLine[0].id = nextId;
+      lines.push(tempLine);
+      socket.emit("Draw", {newLine: tempLine, id: nextId});
+      nextId += 1;
+      tempLine = [];
+    }
+
+    socket.on("ReceiveDrawing", function(data) {
+      nextId = data.id + 1;
+      console.log(nextId);
+      let exists = false;
+      lines.forEach(line => {
+        if(line[0].id == data.id) {
+          exists = true;
+        }
+      });
+      if (!exists) {
+        lines.push(data.newLine);
+      }
+    });
+
+    socket.on("InitialDrawing", function(data) {
+      if (lines.length == 0) {
+        lines = data.drawing;
+        nextId = data.nextId;
+      }
+    });
+    
+    animate();
+  </script>
+
+
 </html>
